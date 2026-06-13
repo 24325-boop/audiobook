@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>나만의 AI 스마트 오디오 북</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+</head>
+<body class="bg-amber-50 text-stone-800 font-sans min-h-screen">
+
+    <div class="max-w-4xl mx-auto p-6">
+        <header class="text-center my-8">
+            <h1 class="text-3xl font-bold text-amber-900">🎧 나만의 AI 스마트 오디오 백과사전</h1>
+            <p class="text-stone-600 mt-2">모르는 것을 물어보면 AI 성우가 책처럼 읽어줍니다.</p>
+        </header>
+
+        <section id="auth-section" class="bg-white p-6 rounded-lg shadow-md mb-6 max-w-md mx-auto">
+            <h2 class="text-xl font-semibold mb-4 text-center text-amber-800">로그인 / 회원가입</h2>
+            <div class="space-y-3">
+                <input type="email" id="email" placeholder="이메일 주소" class="w-full p-2 border border-stone-300 rounded focus:outline-amber-500">
+                <input type="password" id="password" placeholder="비밀번호 (6자리 이상)" class="w-full p-2 border border-stone-300 rounded focus:outline-amber-500">
+                <div class="flex space-x-2">
+                    <button onclick="handleSignUp()" class="w-1/2 bg-amber-600 text-white p-2 rounded hover:bg-amber-700 transition">회원가입</button>
+                    <button onclick="handleLogin()" class="w-1/2 bg-amber-800 text-white p-2 rounded hover:bg-amber-900 transition">로그인</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="main-section" class="hidden space-y-6">
+            <div class="flex justify-between items-center bg-amber-100 p-3 rounded-lg">
+                <span id="user-info" class="font-medium text-amber-950"></span>
+                <button onclick="handleLogout()" class="bg-stone-500 text-white px-3 py-1 rounded text-sm hover:bg-stone-600">로그아웃</button>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-lg font-semibold mb-3 text-amber-900">🧐 AI 성우에게 질문하기</h3>
+                <div class="flex space-x-2">
+                    <input type="text" id="question-input" placeholder="예: 하늘은 왜 파란색이야?" class="flex-1 p-3 border border-stone-300 rounded-lg focus:outline-amber-500">
+                    <button onclick="askQuestion()" id="ask-btn" class="bg-amber-700 text-white px-6 py-3 rounded-lg hover:bg-amber-800 font-bold">질문하기</button>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow-md border-l-4 border-amber-700">
+                <h3 class="text-lg font-semibold text-amber-900 mb-2">📖 AI 오디오북 본문</h3>
+                <div id="ai-response" class="text-stone-700 min-h-[100px] bg-stone-50 p-4 rounded mb-4 whitespace-pre-line leading-relaxed">
+                    질문을 입력하면 이곳에 책의 내용이 표시됩니다.
+                </div>
+                <div class="flex space-x-2">
+                    <button onclick="playTTS()" class="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700">▶️ 다시듣기</button>
+                    <button onclick="stopTTS()" class="bg-rose-600 text-white px-4 py-2 rounded hover:bg-rose-700">⏸️ 한 줄 중지</button>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-lg font-semibold text-amber-900 mb-4">📚 나의 오디오 서재 기록</h3>
+                <ul id="history-list" class="space-y-3 divide-y divide-stone-100"></ul>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // 1. 본인의 파이어베이스 설정값 (그대로 유지)
+        const firebaseConfig = {
+            apiKey: "AIzaSyAAfA8F52UISXuxqhlAF_dDh_CINFQsvd4",
+            authDomain: "test-a6500.firebaseapp.com",
+            databaseURL: "https://test-a6500-default-rtdb.firebaseio.com",
+            projectId: "test-a6500",
+            storageBucket: "test-a6500.firebasestorage.app",
+            messagingSenderId: "356992498637",
+            appId: "1:356992498637:web:ae1f3908cacb56a36b6284",
+            measurementId: "G-KYJ210KC65"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const database = firebase.database();
+
+        let currentUser = null;
+        let currentResponseText = "";
+
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('auth-section').classList.add('hidden');
+                document.getElementById('main-section').classList.remove('hidden');
+                document.getElementById('user-info').innerText = `👤 ${user.email} 님의 서재`;
+                loadHistory();
+            } else {
+                currentUser = null;
+                document.getElementById('auth-section').classList.remove('hidden');
+                document.getElementById('main-section').classList.add('hidden');
+                stopTTS();
+            }
+        });
+
+        function handleSignUp() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            auth.createUserWithEmailAndPassword(email, password)
+                .then(() => alert('회원가입 성공!'))
+                .catch(err => alert('회원가입 실패: ' + err.message));
+        }
+
+        function handleLogin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            auth.signInWithEmailAndPassword(email, password)
+                .then(() => alert('로그인 성공!'))
+                .catch(err => alert('로그인 실패: ' + err.message));
+        }
+
+        function handleLogout() {
+            auth.signOut().then(() => alert('로그아웃 되었습니다.'));
+        }
+
+        // --- [중요!!] 깃허브용 질문 기능 ---
+        function askQuestion() {
+            const question = document.getElementById('question-input').value;
+            if(!question.trim()) return alert('질문을 입력해주세요!');
+
+            const btn = document.getElementById('ask-btn');
+            btn.disabled = true;
+            btn.innerText = "AI 생각 중...";
+            document.getElementById('ai-response').innerText = "AI 성우가 책을 집필하고 있습니다. 잠시만 기다려주세요...";
+
+            stopTTS();
+
+            // ★ 2단계: 아까 1부 7번에서 구글 앱스 스크립트에서 복사한 웹 앱 URL을 아래에 붙여넣으세요!
+            const gasUrl = "https://script.google.com/macros/s/AKfycbylK6f8JRvaL9z5N03WP_B_SlP-Vt5GmkocZLQW_8F6l94eSl1Oc-nMhM_KEIUbElwR/exec
+"; 
+
+            // 구글 웹 앱과 통신하기
+            fetch(`${gasUrl}?question=${encodeURIComponent(question)}`)
+                .then(response => response.text())
+                .then(response => {
+                    btn.disabled = false;
+                    btn.innerText = "질문하기";
+
+                    document.getElementById('ai-response').innerText = response;
+                    currentResponseText = response;
+
+                    speakText(response);
+
+                    if(currentUser) {
+                        const userRef = database.ref('users/' + currentUser.uid + '/history');
+                        userRef.push({
+                            question: question,
+                            answer: response,
+                            timestamp: Date.now()
+                        });
+                    }
+                    document.getElementById('question-input').value = "";
+                })
+                .catch(err => {
+                    btn.disabled = false;
+                    btn.innerText = "질문하기";
+                    alert("통신 에러 발생: " + err);
+                });
+        }
+
+        function loadHistory() {
+            const userRef = database.ref('users/' + currentUser.uid + '/history');
+            userRef.on('value', snapshot => {
+                const listEl = document.getElementById('history-list');
+                listEl.innerHTML = "";
+
+                if(!snapshot.exists()) {
+                    listEl.innerHTML = `<li class="text-stone-400 text-sm text-center py-4">기록이 없습니다.</li>`;
+                    return;
+                }
+
+                const data = snapshot.val();
+                const items = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+                items.sort((a, b) => b.timestamp - a.timestamp);
+
+                items.forEach(item => {
+                    const li = document.createElement('li');
+                    li.className = "py-3 flex justify-between items-start gap-4";
+                    li.innerHTML = `
+                        <div class="flex-1">
+                            <p class="font-semibold text-amber-950 text-sm">Q. ${escapeHtml(item.question)}</p>
+                            <p class="text-stone-600 text-xs mt-1 line-clamp-2">${escapeHtml(item.answer)}</p>
+                        </div>
+                        <div class="flex space-x-1 text-xs shrink-0">
+                            <button onclick="listenAgain('${escapeJs(item.answer)}')" class="bg-stone-200 text-stone-700 px-2 py-1 rounded hover:bg-amber-200">🎧 듣기</button>
+                            <button onclick="deleteHistory('${item.id}')" class="bg-stone-100 text-rose-600 px-2 py-1 rounded hover:bg-rose-100">❌ 삭제</button>
+                        </div>
+                    `;
+                    listEl.appendChild(li);
+                });
+            });
+        }
+
+        function deleteHistory(id) {
+            if(confirm("정말 삭제하시겠습니까?")) {
+                database.ref('users/' + currentUser.uid + '/history/' + id).remove();
+            }
+        }
+
+        function listenAgain(answerText) {
+            document.getElementById('ai-response').innerText = answerText;
+            currentResponseText = answerText;
+            speakText(answerText);
+        }
+
+        function speakText(text) {
+            window.speechSynthesis.cancel();
+            if(!text || text.startsWith("❌")) return;
+            const speech = new SpeechSynthesisUtterance(text);
+            speech.lang = 'ko-KR';
+            speech.rate = 0.95;
+            window.speechSynthesis.speak(speech);
+        }
+
+        function playTTS() { if(currentResponseText) speakText(currentResponseText); }
+        function stopTTS() { window.speechSynthesis.cancel(); }
+
+        function escapeHtml(str) {
+            if(!str) return '';
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+        function escapeJs(str) {
+            if(!str) return '';
+            return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+        }
+    </script>
+</body>
+</html>
