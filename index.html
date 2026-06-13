@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <title>나만의 AI 스마트 오디오 북</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
@@ -56,14 +55,13 @@
 
             <div class="bg-white p-6 rounded-lg shadow-md">
                 <h3 class="text-lg font-semibold text-amber-900 mb-4">📚 나의 오디오 서재 기록 (과거 질문 목록)</h3>
-                <ul id="history-list" class="space-y-3 divide-y divide-stone-100">
-                    </ul>
+                <ul id="history-list" class="space-y-3 divide-y divide-stone-100"></ul>
             </div>
         </section>
     </div>
 
     <script>
-        // 보주신 본인의 파이어베이스 실제 설정값 (데이터베이스 주소 추가 완료)
+        // 파이어베이스 프로젝트(my-audiobook-app-ceed6) 설정값 자동 세팅 완료
         const firebaseConfig = {
             apiKey: "AIzaSyA0H4u0SnnFS3gZwCRncxFW9UkXUQ7wCwo",
             authDomain: "my-audiobook-app-ceed6.firebaseapp.com",
@@ -74,22 +72,20 @@
             appId: "1:183594184412:web:c55ceaee10443b7f4e0e19"
         };
         
-        // Firebase 초기화
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
         const database = firebase.database();
 
         let currentUser = null;
-        let currentResponseText = ""; // 현재 읽고 있는 AI 답변 저장용
+        let currentResponseText = "";
 
-        // --- [Authentication] 인증 상태 감지 ---
         auth.onAuthStateChanged(user => {
             if (user) {
                 currentUser = user;
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('main-section').classList.remove('hidden');
                 document.getElementById('user-info').innerText = `👤 ${user.email} 님의 서재`;
-                loadHistory(); // 로그인 완료 시 과거 데이터 가져오기
+                loadHistory();
             } else {
                 currentUser = null;
                 document.getElementById('auth-section').classList.remove('hidden');
@@ -98,7 +94,6 @@
             }
         });
 
-        // 회원가입 함수
         function handleSignUp() {
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
@@ -107,7 +102,6 @@
                 .catch(err => alert('회원가입 실패: ' + err.message));
         }
 
-        // 로그인 함수
         function handleLogin() {
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
@@ -116,13 +110,11 @@
                 .catch(err => alert('로그인 실패: ' + err.message));
         }
 
-        // 로그아웃 함수
         function handleLogout() {
             auth.signOut().then(() => alert('로그아웃 되었습니다.'));
         }
 
-
-        // --- [API 연동 & 데이터 저장(Create)] ---
+        // AI 질문 호출 및 저장
         function askQuestion() {
             const question = document.getElementById('question-input').value;
             if(!question.trim()) return alert('질문을 입력해주세요!');
@@ -132,12 +124,11 @@
             btn.innerText = "AI 생각 중...";
             document.getElementById('ai-response').innerText = "AI 성우가 책을 집필하고 있습니다. 잠시만 기다려주세요...";
 
-            stopTTS(); // 기존 소리 끄기
+            stopTTS();
 
-            // ⚠️ [중요] 이전 단계(1부)에서 구글 앱스 스크립트 배포 후 복사해둔 "웹 앱 URL"을 아래 따옴표 안에 꼭 넣어주세요!
-            const gasUrl = "YOUR_NEW_WEB_APP_URL"; 
+            // ⚠️ [여기만 수정하세요!] 아래 따옴표 안의 글자를 싹 지우고 본인의 구글 웹 앱 URL을 넣으세요!
+            const gasUrl = "https://script.google.com/macros/s/AKfycbylK6f8JRvaL9z5N03WP_B_SlP-Vt5GmkocZLQW_8F6l94eSl1Oc-nMhM_KEIUbElwR/exec"; 
             
-            // GitHub 호스팅 전용 fetch 통신 방식
             fetch(`${gasUrl}?question=${encodeURIComponent(question)}`)
                 .then(response => response.text())
                 .then(response => {
@@ -147,10 +138,8 @@
                     document.getElementById('ai-response').innerText = response;
                     currentResponseText = response;
                     
-                    // 1. Web Speech API로 즉시 텍스트 읽어주기 (TTS)
                     speakText(response);
 
-                    // 2. Firebase Realtime Database에 저장 (CRUD 중 Create)
                     if(currentUser) {
                         const userRef = database.ref('users/' + currentUser.uid + '/history');
                         userRef.push({
@@ -168,9 +157,7 @@
                 });
         }
 
-
-        // --- [Firebase 데이터 연동 (Read & Delete)] ---
-        // 데이터 실시간 불러오기 (Read)
+        // 서재 기록 불러오기
         function loadHistory() {
             const userRef = database.ref('users/' + currentUser.uid + '/history');
             userRef.on('value', snapshot => {
@@ -204,7 +191,6 @@
             });
         }
 
-        // 데이터 삭제하기 (Delete)
         function deleteHistory(id) {
             if(confirm("이 서재 기록을 정말 삭제하시겠습니까?")) {
                 database.ref('users/' + currentUser.uid + '/history/' + id).remove()
@@ -213,15 +199,12 @@
             }
         }
 
-        // 과거 기록 다시 듣기 버튼 기능
         function listenAgain(answerText) {
             document.getElementById('ai-response').innerText = answerText;
             currentResponseText = answerText;
             speakText(answerText);
         }
 
-
-        // --- [주요 기능: TTS (Text-to-Speech) Web Speech API] ---
         function speakText(text) {
             window.speechSynthesis.cancel();
             if(!text || text.startsWith("❌")) return;
@@ -246,12 +229,11 @@
             window.speechSynthesis.cancel();
         }
 
-
-        // 보안을 위한 문자열 탈출(Escape) 헬퍼 함수들
         function escapeHtml(str) {
             if(!str) return '';
             return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         }
+        
         function escapeJs(str) {
             if(!str) return '';
             return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
